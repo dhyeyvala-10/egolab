@@ -1,0 +1,65 @@
+[project]
+name = "egolabs"
+version = "0.1.0"
+description = "Ego Labs API and workers"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.141,<1",
+  "uvicorn[standard]>=0.53",
+  "sqlalchemy>=2.0.54,<2.1",
+  "alembic>=1.20",
+  "psycopg[binary]>=3.3",
+  "pydantic>=2.13,<3",
+  "pydantic-settings>=2.15",
+  "email-validator>=2.3",
+  "pwdlib[argon2]>=0.3",
+  "pyjwt[crypto]>=2.14",  # crypto: RS256, to verify Google sign-in tokens
+  "celery[redis]>=5.6",
+  "redis>=5",
+  "boto3>=1.43",
+  # Computer vision (Phase 3)
+  "mediapipe>=1.0.1,<2",
+  "numpy>=2.2",
+  "pyarrow>=25",
+  # Phase 7: drawing annotated videos (the same OpenCV package MediaPipe installs)
+  "opencv-contrib-python",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9",
+  "httpx>=0.28",
+  "moto[s3,server]>=5.1",
+  "ruff>=0.16",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["egolabs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+  # Alembic can't compare the trigram index's expression (it has an operator class); it's made by migration 0008.
+  "ignore:Expression #1 .* gin_trgm_ops:UserWarning",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = [
+  "B008", # FastAPI's Depends() in defaults
+  "E501", # line length is the formatter's job
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["egolabs", "tests"]
+known-third-party = ["alembic"] # the local alembic/ scripts dir is not a package
