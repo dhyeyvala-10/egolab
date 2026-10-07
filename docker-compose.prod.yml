@@ -1,0 +1,47 @@
+# Production overrides: put Ego Labs online through a Cloudflare Tunnel (no open ports, free HTTPS).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
+#
+# (or scripts/deploy.ps1 on Windows). Set APP_DOMAIN, FILES_DOMAIN, CLOUDFLARE_TUNNEL_TOKEN, and strong
+# secrets in `.env` first; docs/deploy.md walks through it. The tunnel sends https://APP_DOMAIN to the web
+# app and https://FILES_DOMAIN to storage (uploads and downloads go straight to storage, with signed links).
+# Nothing else is reachable from outside: the database, Redis, storage and the API publish no ports.
+
+x-prod-backend-env: &prod-backend-env
+  ENVIRONMENT: production # refuses to start with the development JWT secret
+  S3_PUBLIC_ENDPOINT_URL: https://${FILES_DOMAIN:?set FILES_DOMAIN in .env}
+  CORS_ORIGINS: '["https://${APP_DOMAIN:?set APP_DOMAIN in .env}"]'
+  PASSWORD_LOGIN: "false"
+
+services:
+  postgres:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  minio:
+    ports: !reset []
+  api:
+    ports: !reset []
+    environment: *prod-backend-env
+  worker:
+    environment: *prod-backend-env
+  scheduler:
+    environment: *prod-backend-env
+  web:
+    ports: !reset []
+    environment:
+      PUBLIC_WEB_URL: https://${APP_DOMAIN}
+      COOKIE_SECURE: "true"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+      # HTTP/2 over TCP instead of the default QUIC (UDP): QUIC is often throttled on Windows/Docker and by
+      # routers and hotspots, which made uploads much slower. Set CLOUDFLARE_TUNNEL_PROTOCOL=quic to go back.
+      TUNNEL_TRANSPORT_PROTOCOL: ${CLOUDFLARE_TUNNEL_PROTOCOL:-http2}
+    depends_on:
+      web: { condition: service_healthy }
+      minio: { condition: service_healthy }

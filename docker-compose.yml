@@ -1,0 +1,127 @@
+# Ego Labs local stack: `docker compose up`
+# Every value has a development default; override any of them in a root `.env` file (see .env.example).
+# Every service restarts on its own if it stops, and when Docker starts (unless you stopped it yourself).
+
+name: egolabs
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-egolabs}:${POSTGRES_PASSWORD:-egolabs}@postgres:5432/${POSTGRES_DB:-egolabs}
+  REDIS_URL: redis://redis:6379/0
+  S3_ENDPOINT_URL: http://minio:9000
+  # Browsers upload and play media straight from storage, so URLs are signed for the host-published port.
+  S3_PUBLIC_ENDPOINT_URL: http://localhost:${MINIO_PORT:-9000}
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER:-egolabs}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-egolabs-dev-secret}
+  JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-jwt-secret-change-me}
+  CORS_ORIGINS: '["http://localhost:${WEB_PORT:-3000}"]'
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  # Inspector proxy codec: h264 (every mainstream browser) or vp9 (browsers built without H.264)
+  PROXY_CODEC: ${PROXY_CODEC:-h264}
+  # Sign-in with Google (see .env.example); password sign-in is for scripts only.
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  PASSWORD_LOGIN: ${PASSWORD_LOGIN:-false}
+  # The owner: the only admin (see .env.example).
+  OWNER_EMAIL: ${OWNER_EMAIL:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-egolabs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-egolabs}
+      POSTGRES_DB: ${POSTGRES_DB:-egolabs}
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports: ["${REDIS_PORT:-6379}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    build: ./infra/minio # built from a pinned source release; MinIO no longer publishes images
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-egolabs}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-egolabs-dev-secret}
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    # bootstrap applies migrations and creates the storage buckets before the API starts
+    environment: *backend-env
+    ports: ["${API_PORT:-8000}:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["celery", "-A", "egolabs.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment: *backend-env
+    depends_on:
+      api: { condition: service_healthy } # migrations are applied by the api container
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A egolabs.worker.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 10s
+
+  scheduler:
+    build: ./backend
+    restart: unless-stopped
+    # Celery beat sends one task a minute; the worker runs it: due pipeline schedules, automatic step
+    # retries, and recovering jobs whose worker died (no heartbeat). Schedules live in the database.
+    command: ["celery", "-A", "egolabs.worker.celery_app", "beat", "--loglevel=INFO", "--schedule", "/tmp/celerybeat-schedule"]
+    environment: *backend-env
+    depends_on:
+      api: { condition: service_healthy }
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8000
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
+    ports: ["${WEB_PORT:-3000}:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+volumes:
+  postgres-data:
+  minio-data:
