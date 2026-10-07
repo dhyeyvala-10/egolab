@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/*
+ * Ego Labs design tokens (spec § Design system).
+ * Warm beige in light mode, warm near-black with beige text in dark mode. Each token is
+ * light-dark(light, dark): the browser picks by `color-scheme`, which follows the system setting
+ * until someone uses the theme toggle (it sets data-theme on <html>).
+ * Colour is reserved for meaning: status, confidence, and AI vs human annotations. The terracotta
+ * accent marks the one primary action or highlight in a view.
+ */
+@theme {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Page background, behind cards */
+  --color-ground: light-dark(#f4ede1, #16130f);
+  /* Cards, tables, inputs */
+  --color-canvas: light-dark(#fbf7f0, #211c17);
+  --color-subtle: light-dark(#f6f0e5, #1c1814);
+  --color-hover: light-dark(#ece2d0, #2b251e);
+  --color-ink: light-dark(#2b241b, #efe5d3);
+  --color-ink-2: light-dark(#5b4f41, #cbbfa9);
+  --color-ink-3: light-dark(#7a6d5c, #a29580);
+  --color-line: light-dark(#e3d7c3, #3a3128);
+  --color-line-strong: light-dark(#d3c4ab, #4a3f33);
+
+  /* Accent */
+  --color-accent: light-dark(#b5532a, #e38b5b);
+  --color-on-accent: light-dark(#ffffff, #1a120c);
+  --color-accent-soft: light-dark(#f1d9c8, #3a2519);
+  --color-sage: light-dark(#3f6b58, #8fb8a2);
+  --color-sage-soft: light-dark(#dde6dc, #1f2c25);
+
+  /* Status */
+  --color-success: light-dark(#2f6b3a, #9cc79a);
+  --color-success-bg: light-dark(#e6efdd, #1f3322);
+  --color-success-line: light-dark(#bfd6b0, #2f4a33);
+  --color-warning: light-dark(#94560c, #e6b56a);
+  --color-warning-bg: light-dark(#faedd3, #3a2c14);
+  --color-warning-line: light-dark(#ecd09a, #5a4420);
+  --color-error: light-dark(#a3321f, #f0a08a);
+  --color-error-bg: light-dark(#f8e1d8, #3d1f17);
+  --color-error-line: light-dark(#eab8a8, #5e2e22);
+  --color-running: light-dark(#1d4ed8, #9db8f5);
+  --color-running-bg: light-dark(#e6edfa, #1f2a44);
+  --color-running-line: light-dark(#bccbef, #33456b);
+
+  /* Annotation source */
+  --color-human: light-dark(#0e7490, #67c7dc);
+  --color-human-bg: light-dark(#dff1f2, #15323a);
+  --color-human-line: light-dark(#a8dbe3, #1f4a55);
+  --color-ai: light-dark(#7c3aed, #b69cf5);
+  --color-ai-bg: light-dark(#eee7fb, #2a2144);
+  --color-ai-line: light-dark(#d5c6f5, #41336b);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
